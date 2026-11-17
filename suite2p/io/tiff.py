@@ -6,6 +6,7 @@ import glob
 import json
 import math
 import os
+import re
 import time
 from typing import Union, Tuple, Optional
 
@@ -92,6 +93,25 @@ def open_tiff(file: str,
         tif = ScanImageTiffReader(file)
         Ltif = 1 if len(tif.shape()) < 3 else tif.shape()[0]  # single page tiffs
     return tif, Ltif
+
+
+def starts_new_acquisition(tif, use_sktiff: bool) -> bool:
+    """True if a ScanImage tif begins a new acquisition (its first frame is frame 1 of the acquisition).
+
+    ScanImage restarts the fastZ volume at slice 0 at the start of every acquisition. In a folder of
+    per-trial acquisitions, a tif that ends mid-volume must therefore NOT carry its plane phase into the
+    next tif: doing so rotates the plane assignment of every later file in the folder. (Checked on lab
+    data, 2026-11-17: after such a tif, file frames f % nplanes == k matched reference plane k in 79/80
+    tifs, the carried assignment in 1/80.) A tif that continues an acquisition split across files has
+    frameNumberAcquisition > 1 and keeps the carried phase, exactly as before. Non-ScanImage tiffs
+    (no header): False, i.e. upstream behaviour.
+    """
+    try:
+        desc = tif.pages[0].description if use_sktiff else tif.description(0)
+    except Exception:
+        return False
+    m = re.search(r'frameNumberAcquisition\s*=\s*(\d+)', desc or '')
+    return m is not None and int(m.group(1)) == 1
 
 
 def use_sktiff_reader(tiff_filename, batch_size: Optional[int] = None) -> bool:
@@ -187,6 +207,8 @@ def tiff_to_binary(ops):
         if ops["first_tiffs"][ik]:
             which_folder += 1
             iplane = 0
+        elif ops.get("reset_phase_per_acquisition", True) and starts_new_acquisition(tif, use_sktiff):
+            iplane = 0      # ScanImage restarts the volume at slice 0 on every acquisition
         ix = 0
         while 1:
             im = read_tiff(file, tif, Ltif, ix, batch_size, use_sktiff, ops.get("remove_artifacts", None))
@@ -327,6 +349,8 @@ def mesoscan_to_binary(ops):
         if ops["first_tiffs"][ik]:
             which_folder += 1
             iplane = 0
+        elif ops.get("reset_phase_per_acquisition", True) and starts_new_acquisition(tif, use_sktiff):
+            iplane = 0      # ScanImage restarts the volume at slice 0 on every acquisition
         ix = 0
         while 1:
             if ix >= Ltif:
