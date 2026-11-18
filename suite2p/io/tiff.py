@@ -181,6 +181,8 @@ def tiff_to_binary(ops):
     """
 
     t0 = time.time()
+    # record the plane-phase rule in every plane's saved ops (consumers such as the NWB writer read it)
+    ops.setdefault("reset_phase_per_acquisition", True)
     # copy ops to list where each element is ops for each plane
     ops1 = utils.init_ops(ops)
     nplanes = ops1[0]["nplanes"]
@@ -284,6 +286,7 @@ def mesoscan_to_binary(ops):
 
     """
     t0 = time.time()
+    ops.setdefault("reset_phase_per_acquisition", True)   # recorded in every plane's saved ops
     if "lines" not in ops:
         fpath = os.path.join(ops["data_path"][0], "*json")
         fs = glob.glob(fpath)
