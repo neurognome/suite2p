@@ -40,7 +40,18 @@ def _run(tmp_path, tifs, **extra_ops):
     for o in ops1:
         mov = np.fromfile(o['reg_file'], dtype=np.int16).reshape(-1, o['Ly'], o['Lx'])
         out.append(sorted(set(np.unique(mov).tolist())))
+    _run.rules = [o.get('reset_phase_per_acquisition') for o in ops1]
     return out, [list(o['frames_per_file']) for o in ops1]
+
+
+def test_saved_ops_record_the_phase_rule(tmp_path):
+    whole = [0, 1, 2] * 3
+    (tmp_path / 'default').mkdir()
+    (tmp_path / 'off').mkdir()
+    _run(tmp_path / 'default', [('a_00001.tif', whole, 1)])
+    assert _run.rules == [True] * NPLANES                  # default: restart per acquisition, recorded
+    _run(tmp_path / 'off', [('a_00001.tif', whole, 1)], reset_phase_per_acquisition=False)
+    assert _run.rules == [False] * NPLANES
 
 
 def test_new_acquisition_after_ragged_tif_restarts_at_slice_0(tmp_path):
